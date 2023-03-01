@@ -243,6 +243,14 @@ async function search() {
 
     displaySearchResults(results);
 
+    if (global.search.type === 'tv') {
+      document.querySelector('#movies').checked = false;
+      document.querySelector('#shows').checked = true;
+    } else if (global.search.type === 'movies') {
+      document.querySelector('#shows').checked = false;
+      document.querySelector('#movies').checked = true;
+    }
+
     document.querySelector('#search-term').value = '';
   } else {
     showAlert('Please enter a search term.', 'error');
@@ -250,6 +258,13 @@ async function search() {
 }
 
 function displaySearchResults(results) {
+  // clear previous results
+
+  document.querySelector('#search-results').innerHTML = '';
+  document.querySelector('#search-results-heading').innerHTML = '';
+  document.querySelector('#pagination').innerHTML = '';
+  // document.querySelector('#pagination').innerHTML = '';
+
   results.forEach((result) => {
     let title, releaseDate;
     if (global.search.type === 'movie') {
@@ -288,7 +303,9 @@ function displaySearchResults(results) {
       </div>`;
 
     document.querySelector('#search-results-heading').innerHTML = `
-      <h2 id="page-count">${results.length} of ${global.search.totalResults}</h2>`;
+      <h2 id="page-count">${results.length * (global.search.page - 1) + 1} - ${
+      results.length * global.search.page
+    } of ${global.search.totalResults}</h2>`;
 
     document.querySelector('#search-results').appendChild(div);
   });
@@ -463,6 +480,14 @@ function getCurrentPageURL() {
   }
 }
 
+function checkIfSearchIsEmpty(e) {
+  const input = document.querySelector('#search-term').value;
+  if (input === '') {
+    e.preventDefault();
+    showAlert('Please enter a search term.');
+  }
+}
+
 // show alert
 function showAlert(message, className = 'error') {
   const alertEl = document.createElement('div');
@@ -485,6 +510,9 @@ function init() {
     case 'index.html':
       displaySlider();
       displayPopularMovies();
+      document
+        .querySelector('#searchBtn')
+        .addEventListener('click', checkIfSearchIsEmpty);
       break;
     case 'shows.html':
       displayPopularShows();
@@ -497,6 +525,9 @@ function init() {
       break;
     case 'search.html':
       search();
+      document
+        .querySelector('#searchBtn')
+        .addEventListener('click', checkIfSearchIsEmpty);
       break;
   }
 
