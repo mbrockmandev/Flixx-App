@@ -1,12 +1,20 @@
 const global = {
   currentPage: getCurrentPageURL(),
+  search: {
+    term: '',
+    type: '',
+    page: 1,
+    totalPages: 1,
+    totalResults: 0,
+  },
+  API_URL: 'https://api.themoviedb.org/3/',
 };
 
 async function getAPIKey() {
   const api_json = await fetch('./js/constants.json');
   const api_data = await api_json.json();
   const api_key = await api_data.key;
-  const apiRes = Promise.resolve(api_key)
+  Promise.resolve(api_key)
     .then((key) => {
       global.API_KEY = key;
     })
@@ -147,9 +155,8 @@ async function displayMovieDetails() {
 
 async function displayShowDetails() {
   const showId = window.location.search.split('=')[1];
-  console.log(showId);
+
   const show = await fetchAPIData(`tv/${showId}`);
-  console.log(show);
 
   // overlay for background image
   displayBackgroundImage('show', show.backdrop_path);
@@ -212,6 +219,117 @@ async function displayShowDetails() {
     `;
 
   document.querySelector('#show-details').appendChild(div);
+}
+
+async function search() {
+  const queryString = window.location.search;
+  const urlParams = new URLSearchParams(queryString);
+
+  global.search.type = urlParams.get('type');
+  global.search.term = urlParams.get('search-term');
+
+  if (global.search.term !== '' && global.search.term !== null) {
+    // @todo - make request and display results
+    const { results, total_pages, page, total_results } = await searchAPIData();
+
+    global.search.page = page;
+    global.search.totalPages = total_pages;
+    global.search.totalResults = total_results;
+
+    if (results.length === 0) {
+      showAlert('No results found.');
+      return;
+    }
+
+    displaySearchResults(results);
+
+    document.querySelector('#search-term').value = '';
+  } else {
+    showAlert('Please enter a search term.', 'error');
+  }
+}
+
+function displaySearchResults(results) {
+  results.forEach((result) => {
+    let title, releaseDate;
+    if (global.search.type === 'movie') {
+      title = result.title;
+      releaseDate = result.release_date;
+    } else if (global.search.type === 'tv') {
+      title = result.name;
+      releaseDate = result.first_air_date;
+    } else {
+      showAlert("I'm not sure how, but that's not a valid type!");
+    }
+    const div = document.createElement('div');
+    div.classList.add('card');
+
+    div.innerHTML = `
+      <a href="${global.search.type}-details.html?id=${result.id}">
+        ${
+          result.poster_path
+            ? `<img
+        src="https://image.tmdb.org/t/p/w500${result.poster_path}"
+        class="card-img-top"
+        alt="${title}"
+      />`
+            : `<img
+        src="images/no-image.jpg"
+        class="card-img-top"
+        alt="${title}"
+      />`
+        }
+      </a>
+      <div class="card-body">
+        <h5 class="card-title">${title}</h5>
+        <p class="card-text">
+          <small class="text-muted">Release: ${releaseDate}</small>
+        </p>
+      </div>`;
+
+    document.querySelector('#search-results-heading').innerHTML = `
+      <h2 id="page-count">${results.length} of ${global.search.totalResults}</h2>`;
+
+    document.querySelector('#search-results').appendChild(div);
+  });
+
+  displayPagination();
+}
+
+// create and display pagination for search
+function displayPagination() {
+  const div = document.createElement('div');
+  div.classList.add('pagination');
+  div.innerHTML = `
+  <button class="btn btn-primary" id="prev">Prev</button>
+  <button class="btn btn-primary" id="next">Next</button>
+  <div class="page-counter">Page ${global.search.page} of ${global.search.totalPages}</div>
+  `;
+
+  document.querySelector('#pagination').appendChild(div);
+
+  // disable prev btn on first page
+  if (global.search.page === 1) {
+    document.querySelector('#prev').disabled = true;
+  } else if (global.search.page === global.search.totalPages) {
+    document.querySelector('#next').disabled = true;
+  }
+
+  // navigate to next page
+  document.querySelector('#next').addEventListener('click', async () => {
+    global.search.page++;
+    const { results, total_pages } = await searchAPIData();
+    displaySearchResults(results);
+    document.getElementById('page-count').scrollIntoView();
+  });
+
+  // navigate to prev page
+  document.querySelector('#prev').addEventListener('click', async () => {
+    global.search.page--;
+    const { results, total_pages } = await searchAPIData();
+    displaySearchResults(results);
+    document.getElementById('page-count').scrollIntoView();
+  });
 }
 
 // display slider movies
@@ -286,17 +404,34 @@ function displayBackgroundImage(type, backgroundPath) {
 
 // Fetch data from TMDB API
 async function fetchAPIData(endpoint) {
-  await getAPIKey();
-  const API_KEY = global.API_KEY;
-  const API_URL = 'https://api.themoviedb.org/3/';
+  if (global.API_KEY === undefined) {
+    await getAPIKey();
+  }
 
   showSpinner();
   const response = await fetch(
-    `${API_URL}${endpoint}?api_key=${API_KEY}&language=en-US`
+    `${global.API_URL}${endpoint}?api_key=${global.API_KEY}&language=en-US`
   );
   const data = await response.json();
 
   hideSpinner();
+  return data;
+}
+
+// make request to search
+async function searchAPIData() {
+  if (global.API_KEY === undefined) {
+    await getAPIKey();
+  }
+
+  showSpinner();
+  const response = await fetch(
+    `${global.API_URL}search/${global.search.type}?api_key=${global.API_KEY}&language=en-US&query=${global.search.term}&page=${global.search.page}`
+  );
+  const data = await response.json();
+
+  hideSpinner();
+
   return data;
 }
 
@@ -328,6 +463,16 @@ function getCurrentPageURL() {
   }
 }
 
+// show alert
+function showAlert(message, className = 'error') {
+  const alertEl = document.createElement('div');
+  alertEl.classList.add('alert', className);
+  alertEl.appendChild(document.createTextNode(message));
+  document.querySelector('#alert').appendChild(alertEl);
+
+  setTimeout(() => alertEl.remove(), 3000);
+}
+
 function addCommasToMoney(money) {
   return money.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
@@ -351,7 +496,7 @@ function init() {
       displayShowDetails();
       break;
     case 'search.html':
-      console.log('Search');
+      search();
       break;
   }
 
